@@ -1,0 +1,295 @@
+---
+# ============================================
+# KUBERNETES DEPLOYMENT
+# ============================================
+# Production-ready Kubernetes deployment for Slack MCP Server
+#
+# Apply with:
+#   kubectl apply -f kubernetes-deployment.yaml
+#
+# ============================================
+
+# Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: slack-mcp
+  labels:
+    name: slack-mcp
+    environment: production
+
+---
+# ConfigMap for non-sensitive configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: slack-mcp-config
+  namespace: slack-mcp
+data:
+  SLACK_MCP_HOST: "0.0.0.0"
+  SLACK_MCP_PORT: "3001"
+  SLACK_MCP_LOG_LEVEL: "info"
+  SLACK_MCP_USERS_CACHE: "/data/cache/users_cache.json"
+  SLACK_MCP_CHANNELS_CACHE: "/data/cache/channels_cache_v2.json"
+  ENVIRONMENT: "production"
+
+---
+# Secret for sensitive data
+apiVersion: v1
+kind: Secret
+metadata:
+  name: slack-mcp-secrets
+  namespace: slack-mcp
+type: Opaque
+stringData:
+  SLACK_MCP_XOXP_TOKEN: "REPLACE_WITH_YOUR_TOKEN"
+  SLACK_MCP_API_KEY: "REPLACE_WITH_YOUR_API_KEY"
+
+---
+# PersistentVolumeClaim for cache
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: slack-mcp-cache
+  namespace: slack-mcp
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: standard
+
+---
+# PersistentVolumeClaim for logs
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: slack-mcp-logs
+  namespace: slack-mcp
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: standard
+
+---
+# Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: slack-mcp-server
+  namespace: slack-mcp
+  labels:
+    app: slack-mcp-server
+    version: v1
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: slack-mcp-server
+  template:
+    metadata:
+      labels:
+        app: slack-mcp-server
+        version: v1
+    spec:
+      # Security context
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      
+      containers:
+      - name: slack-mcp-server
+        image: ghcr.io/korotovsky/slack-mcp-server:latest
+        imagePullPolicy: Always
+        
+        ports:
+        - name: http
+          containerPort: 3001
+          protocol: TCP
+        
+        # Environment variables from ConfigMap
+        envFrom:
+        - configMapRef:
+            name: slack-mcp-config
+        - secretRef:
+            name: slack-mcp-secrets
+        
+        # Resource limits
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "1000m"
+        
+        # Liveness probe
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        # Readiness probe
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        
+        # Volume mounts
+        volumeMounts:
+        - name: cache
+          mountPath: /data/cache
+        - name: logs
+          mountPath: /var/log/slack-mcp-server
+      
+      volumes:
+      - name: cache
+        persistentVolumeClaim:
+          claimName: slack-mcp-cache
+      - name: logs
+        persistentVolumeClaim:
+          claimName: slack-mcp-logs
+
+---
+# Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: slack-mcp-service
+  namespace: slack-mcp
+  labels:
+    app: slack-mcp-server
+spec:
+  type: ClusterIP
+  ports:
+  - port: 3001
+    targetPort: http
+    protocol: TCP
+    name: http
+  selector:
+    app: slack-mcp-server
+
+---
+# Ingress (if using Ingress controller)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: slack-mcp-ingress
+  namespace: slack-mcp
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/rate-limit: "60"
+spec:
+  tls:
+  - hosts:
+    - slack-mcp.your-domain.com
+    secretName: slack-mcp-tls
+  rules:
+  - host: slack-mcp.your-domain.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: slack-mcp-service
+            port:
+              number: 3001
+
+---
+# HorizontalPodAutoscaler
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: slack-mcp-hpa
+  namespace: slack-mcp
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: slack-mcp-server
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+
+---
+# PodDisruptionBudget
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: slack-mcp-pdb
+  namespace: slack-mcp
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: slack-mcp-server
+
+---
+# NetworkPolicy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: slack-mcp-netpol
+  namespace: slack-mcp
+spec:
+  podSelector:
+    matchLabels:
+      app: slack-mcp-server
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 3001
+  egress:
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 443
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 53
+    - protocol: UDP
+      port: 53
+

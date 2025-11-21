@@ -1,15 +1,219 @@
-.idea
+# ============================================
+# Git Ignore - Production Ready
+# ============================================
+
+# Environment files (NEVER commit these!)
 .env
+.env.*
+.env.production
+.env.staging
+.env.development
+.env.local
+!env.production.template
+
+# Secrets and credentials
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+secrets/
+credentials/
+
+# Build artifacts
+build/
+dist/
+*.exe
+*.dll
+*.so
+*.dylib
+bin/
+obj/
+
+# Go build artifacts
+*.test
+*.out
+vendor/
+
+# Test coverage
+coverage.txt
+coverage.html
+*.coverprofile
+
+# Cache files
+.cache/
+*.cache
 .users_cache.json
 .channels_cache.json
 .channels_cache_v2.json
-/extension.dxt/server/slack-mcp-server-*
-/extension.dxt/server/index.js
-/build/slack-mcp-server-*
-/build/slack-mcp-server.dxt
-/npm/slack-mcp-server-*/bin/slack-mcp-server-*
-/npm/slack-mcp-server-*/.npmrc
-/npm/slack-mcp-server/.npmrc
-/npm/slack-mcp-server/LICENSE
-/npm/slack-mcp-server/README.md
-docker-compose.release.yml
+users_cache.json
+channels_cache.json
+channels_cache_v2.json
+
+# Logs
+*.log
+logs/
+*.log.*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Backups
+backups/
+*.backup
+*.bak
+*.tar.gz
+*.zip
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# IDE and editor files
+.vscode/
+.idea/
+*.sublime-*
+*.code-workspace
+.project
+.classpath
+.settings/
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Node modules (if using npm)
+node_modules/
+npm-debug.log
+yarn-error.log
+package-lock.json
+yarn.lock
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+pip-log.txt
+pip-delete-this-directory.txt
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Docker
+.dockerignore
+docker-compose.override.yml
+
+# Kubernetes
+*.kubeconfig
+kubeconfig
+
+# CI/CD
+.github/workflows/*.local.yml
+
+# Testing artifacts
+test-results/
+*.test
+.test-cache/
+
+# Documentation builds
+site/
+_site/
+.jekyll-cache/
+.sass-cache/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Compiled files
+*.com
+*.class
+*.dll
+*.exe
+*.o
+*.so
+
+# Archives
+*.7z
+*.dmg
+*.gz
+*.iso
+*.jar
+*.rar
+*.tar
+*.zip
+
+# SSL/TLS certificates (never commit!)
+*.crt
+*.cer
+*.der
+*.pem
+*.key
+ssl/
+certs/
+
+# Monitoring and metrics
+prometheus/
+grafana/
+
+# Optional: Large files
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.large
+
+# Nginx configs with secrets
+nginx/ssl/
+nginx/*.conf
+!nginx/nginx.conf.template
+
+# Keep these important files
+!.gitignore
+!.dockerignore
+!README.md
+!LICENSE
+!Makefile
+!Makefile.production
+!go.mod
+!go.sum
+!Dockerfile
+
+# Keep templates and examples
+!*.template
+!*.example
+!*-example.*
+
+# Keep documentation
+!*.md
+!docs/**
+
+# Keep scripts
+!scripts/*.sh
+
+# Keep configuration templates
+!env.production.template
+!docker-compose.production.yml
+!kubernetes-deployment.yaml
+
+# Keep CI/CD
+!.github/workflows/*.yml

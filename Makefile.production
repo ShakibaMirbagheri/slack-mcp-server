@@ -1,0 +1,101 @@
+# Production Makefile for Slack MCP Server
+# Include this in main Makefile or use directly:
+# make -f Makefile.production <target>
+
+.PHONY: prod-help prod-setup prod-build prod-test prod-deploy prod-rollback prod-backup prod-health
+
+# Environment
+ENV ?= production
+VERSION ?= $(shell git describe --tags --always --dirty)
+
+prod-help: ## Show production commands
+	@echo "Production Deployment Commands:"
+	@echo "  make prod-setup     - Set up production environment"
+	@echo "  make prod-build     - Build for production"
+	@echo "  make prod-test      - Run production tests"
+	@echo "  make prod-deploy    - Deploy to production"
+	@echo "  make prod-rollback  - Rollback deployment"
+	@echo "  make prod-backup    - Create backup"
+	@echo "  make prod-health    - Check health"
+
+prod-setup: ## Set up production environment
+	@echo "Setting up production environment..."
+	@cp -n env.production.template .env.production || true
+	@chmod 600 .env.production
+	@echo "✓ Created .env.production (configure it with your settings)"
+	@chmod +x scripts/*.sh
+	@echo "✓ Made scripts executable"
+	@mkdir -p backups logs
+	@echo "✓ Created directories"
+	@echo ""
+	@echo "Next steps:"
+	@echo "  1. Edit .env.production with your configuration"
+	@echo "  2. Run: make prod-build"
+	@echo "  3. Run: make prod-deploy"
+
+prod-build: ## Build for production
+	@echo "Building for production..."
+	@./scripts/build.sh
+	@echo "✓ Build complete"
+
+prod-test: ## Run production tests
+	@echo "Running tests..."
+	@make test
+	@make test-integration
+	@echo "✓ Tests passed"
+
+prod-deploy: ## Deploy to production
+	@echo "Deploying to production..."
+	@./scripts/deploy.sh $(ENV)
+	@echo "✓ Deployment complete"
+
+prod-rollback: ## Rollback deployment
+	@echo "Rolling back deployment..."
+	@./scripts/deploy.sh $(ENV) --rollback
+	@echo "✓ Rollback complete"
+
+prod-backup: ## Create backup
+	@echo "Creating backup..."
+	@./scripts/backup.sh
+	@echo "✓ Backup complete"
+
+prod-health: ## Check health
+	@echo "Running health check..."
+	@./scripts/health-check.sh
+
+prod-logs: ## View production logs
+	@if command -v kubectl >/dev/null 2>&1 && kubectl get pods -n slack-mcp >/dev/null 2>&1; then \
+		kubectl logs -f deployment/slack-mcp-server -n slack-mcp; \
+	else \
+		docker-compose -f docker-compose.production.yml logs -f; \
+	fi
+
+prod-status: ## Check production status
+	@echo "Production Status:"
+	@echo "=================="
+	@if command -v kubectl >/dev/null 2>&1 && kubectl get pods -n slack-mcp >/dev/null 2>&1; then \
+		echo "Kubernetes:"; \
+		kubectl get pods -n slack-mcp; \
+		kubectl get svc -n slack-mcp; \
+	else \
+		echo "Docker Compose:"; \
+		docker-compose -f docker-compose.production.yml ps; \
+	fi
+
+prod-clean: ## Clean production artifacts
+	@echo "Cleaning production artifacts..."
+	@rm -rf build/
+	@docker system prune -f
+	@echo "✓ Cleaned"
+
+# Quick deployment workflow
+prod-quick-deploy: prod-build prod-test prod-backup prod-deploy prod-health ## Quick full deployment
+	@echo "✓ Quick deployment complete!"
+
+# CI/CD workflow
+prod-ci: prod-build prod-test ## CI workflow
+	@echo "✓ CI workflow complete"
+
+prod-cd: prod-backup prod-deploy prod-health ## CD workflow
+	@echo "✓ CD workflow complete"
+

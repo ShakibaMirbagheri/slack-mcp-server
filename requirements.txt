@@ -1,0 +1,31 @@
+# MCP LLM Integration Requirements
+# Install with: pip install -r requirements.txt
+
+# Core dependencies
+requests>=2.31.0
+
+# Optional: For real LLM integration
+# Uncomment the ones you need:
+
+# OpenAI (GPT-4, GPT-3.5)
+# openai>=1.0.0
+
+# Anthropic (Claude)
+# anthropic>=0.18.0
+
+# LangChain (optional, for advanced workflows)
+# langchain>=0.1.0
+# langchain-openai>=0.0.5
+# langchain-anthropic>=0.1.0
+
+# Optional: For async support
+# aiohttp>=3.9.0
+# asyncio
+
+# Optional: For enhanced CLI
+# rich>=13.0.0
+# click>=8.1.0
+
+# Optional: For logging
+# python-dotenv>=1.0.0
+

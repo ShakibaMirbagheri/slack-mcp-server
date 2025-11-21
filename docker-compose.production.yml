@@ -1,0 +1,240 @@
+version: '3.8'
+
+# ============================================
+# PRODUCTION DOCKER COMPOSE CONFIGURATION
+# ============================================
+# 
+# Features:
+# - Production-ready settings
+# - Health checks
+# - Resource limits
+# - Restart policies
+# - Volume management
+# - Network isolation
+# - Logging configuration
+#
+# Usage:
+#   docker-compose -f docker-compose.production.yml up -d
+#
+# ============================================
+
+services:
+  slack-mcp-server:
+    image: ghcr.io/korotovsky/slack-mcp-server:latest
+    container_name: slack-mcp-production
+    restart: unless-stopped
+    
+    # Resource limits (adjust based on your needs)
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    # Network
+    networks:
+      - app-tier
+    
+    # Ports
+    ports:
+      - "3001:3001"
+    
+    # Volumes for persistent data
+    volumes:
+      # Cache directory
+      - slack_cache:/data/cache
+      # Logs directory
+      - slack_logs:/var/log/slack-mcp-server
+      # Backups directory
+      - slack_backups:/data/backups
+    
+    # Environment file
+    env_file:
+      - .env.production
+    
+    # Environment overrides
+    environment:
+      # Server configuration
+      SLACK_MCP_HOST: "0.0.0.0"
+      SLACK_MCP_PORT: "3001"
+      
+      # Cache paths (must match volumes)
+      SLACK_MCP_USERS_CACHE: "/data/cache/users_cache.json"
+      SLACK_MCP_CHANNELS_CACHE: "/data/cache/channels_cache_v2.json"
+      
+      # Production settings
+      SLACK_MCP_LOG_LEVEL: "info"
+      ENVIRONMENT: "production"
+    
+    # Security
+    security_opt:
+      - no-new-privileges:true
+    
+    # Read-only root filesystem (uncomment if compatible)
+    # read_only: true
+    
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+        labels: "slack-mcp-server"
+        env: "ENVIRONMENT"
+
+  # Optional: Nginx reverse proxy with SSL
+  nginx:
+    image: nginx:alpine
+    container_name: slack-mcp-nginx
+    restart: unless-stopped
+    
+    depends_on:
+      - slack-mcp-server
+    
+    networks:
+      - app-tier
+    
+    ports:
+      - "80:80"
+      - "443:443"
+    
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - nginx_cache:/var/cache/nginx
+    
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Optional: Redis for distributed caching
+  redis:
+    image: redis:7-alpine
+    container_name: slack-mcp-redis
+    restart: unless-stopped
+    
+    networks:
+      - app-tier
+    
+    volumes:
+      - redis_data:/data
+    
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-changeme}
+    
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+  # Optional: Prometheus for monitoring
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: slack-mcp-prometheus
+    restart: unless-stopped
+    
+    networks:
+      - app-tier
+    
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    
+    ports:
+      - "9090:9090"
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+  # Optional: Grafana for visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: slack-mcp-grafana
+    restart: unless-stopped
+    
+    depends_on:
+      - prometheus
+    
+    networks:
+      - app-tier
+    
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    
+    ports:
+      - "3000:3000"
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+# Named volumes for persistence
+volumes:
+  slack_cache:
+    driver: local
+  slack_logs:
+    driver: local
+  slack_backups:
+    driver: local
+  redis_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+  nginx_cache:
+    driver: local
+
+# Network configuration
+networks:
+  app-tier:
+    name: slack-mcp-production
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.25.0.0/16
+
