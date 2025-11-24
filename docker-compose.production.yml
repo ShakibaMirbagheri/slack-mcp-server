@@ -93,124 +93,6 @@ services:
         labels: "slack-mcp-server"
         env: "ENVIRONMENT"
 
-  # Optional: Nginx reverse proxy with SSL
-  nginx:
-    image: nginx:alpine
-    container_name: slack-mcp-nginx
-    restart: unless-stopped
-    
-    depends_on:
-      - slack-mcp-server
-    
-    networks:
-      - app-tier
-    
-    ports:
-      - "80:80"
-      - "443:443"
-    
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/ssl:/etc/nginx/ssl:ro
-      - nginx_cache:/var/cache/nginx
-    
-    healthcheck:
-      test: ["CMD", "nginx", "-t"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-  # Optional: Redis for distributed caching
-  redis:
-    image: redis:7-alpine
-    container_name: slack-mcp-redis
-    restart: unless-stopped
-    
-    networks:
-      - app-tier
-    
-    volumes:
-      - redis_data:/data
-    
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-changeme}
-    
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 3s
-      retries: 3
-    
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "5m"
-        max-file: "3"
-
-  # Optional: Prometheus for monitoring
-  prometheus:
-    image: prom/prometheus:latest
-    container_name: slack-mcp-prometheus
-    restart: unless-stopped
-    
-    networks:
-      - app-tier
-    
-    volumes:
-      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - prometheus_data:/prometheus
-    
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--web.console.libraries=/etc/prometheus/console_libraries'
-      - '--web.console.templates=/etc/prometheus/consoles'
-      - '--web.enable-lifecycle'
-    
-    ports:
-      - "9090:9090"
-    
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "5m"
-        max-file: "3"
-
-  # Optional: Grafana for visualization
-  grafana:
-    image: grafana/grafana:latest
-    container_name: slack-mcp-grafana
-    restart: unless-stopped
-    
-    depends_on:
-      - prometheus
-    
-    networks:
-      - app-tier
-    
-    volumes:
-      - grafana_data:/var/lib/grafana
-      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
-      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
-    
-    environment:
-      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
-      - GF_USERS_ALLOW_SIGN_UP=false
-    
-    ports:
-      - "3000:3000"
-    
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "5m"
-        max-file: "3"
 
 # Named volumes for persistence
 volumes:
@@ -219,14 +101,6 @@ volumes:
   slack_logs:
     driver: local
   slack_backups:
-    driver: local
-  redis_data:
-    driver: local
-  prometheus_data:
-    driver: local
-  grafana_data:
-    driver: local
-  nginx_cache:
     driver: local
 
 # Network configuration
@@ -237,4 +111,5 @@ networks:
     ipam:
       config:
         - subnet: 172.25.0.0/16
+
 

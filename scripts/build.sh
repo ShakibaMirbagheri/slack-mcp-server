@@ -99,3 +99,5 @@ log_info "Push to registry: docker push ${REGISTRY}/${IMAGE_NAME}:${VERSION}"
 log_info "Run locally: docker run -p 3001:3001 ${REGISTRY}/${IMAGE_NAME}:${VERSION}"
 echo ""
 
+
+
